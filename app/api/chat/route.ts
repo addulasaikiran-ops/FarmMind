@@ -1,0 +1,8 @@
+import {NextResponse} from "next/server";import OpenAI from "openai";import{db}from "@/lib/db";
+export async function POST(req:Request){
+ const {message}=await req.json();if(!message?.trim())return NextResponse.json({error:"Message required"},{status:400});
+ const pool=await db();const fields=(await pool.query("SELECT * FROM fields ORDER BY id")).rows;let answer="";
+ if(process.env.OPENAI_API_KEY){const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const response=await client.responses.create({model:process.env.FARMMIND_MODEL||"gpt-5.5",instructions:"You are FarmMind, an explainable farm irrigation advisor. Use only supplied field data. Be concise and explain rainfall, soil moisture, crop stage, soil type and available water. Never claim to control physical hardware.",input:`Farm fields: ${JSON.stringify(fields)}\nFarmer question: ${message}`,max_output_tokens:500});answer=response.output_text;}
+ else{const f=fields.find((x:any)=>message.toLowerCase().includes(x.id.toLowerCase())||message.toLowerCase().includes(x.name.toLowerCase()));answer=f?`${f.name}: soil moisture is ${f.soil_moisture}%. Ask whether to irrigate this field for a full recommendation.`:"Ask which field needs water first, whether to irrigate Field 2, or why FarmMind recommends waiting.";}
+ await pool.query("INSERT INTO chat_history(message,answer) VALUES($1,$2)",[message,answer]);return NextResponse.json({answer,mode:process.env.OPENAI_API_KEY?"openai":"fallback"});
+}
