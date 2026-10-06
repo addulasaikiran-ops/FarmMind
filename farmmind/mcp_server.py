@@ -1,6 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 from .simulator import FarmSimulator
-from .decision import recommend_irrigation
+from .decision import recommend_irrigation as decision_recommend_irrigation
 
 mcp = FastMCP("FarmMind")
 sim = FarmSimulator()
@@ -35,7 +35,7 @@ def recommend_irrigation(field_id: str) -> dict:
     if not field:
         return {"error": "Unknown field"}
     w = sim.weather()
-    return recommend_irrigation(field, w).__dict__
+    return decision_recommend_irrigation(field, w).__dict__
 
 @mcp.tool()
 def get_water_savings(days: int = 7) -> dict:
