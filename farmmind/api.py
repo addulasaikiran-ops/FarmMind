@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
 from .simulator import FarmSimulator
 from .decision import recommend_irrigation
+from .agent import FarmAgent
 
-app = FastAPI(title="FarmMind", version="0.1.0")
+app = FastAPI(title="FarmMind", version="0.2.0")
 sim = FarmSimulator()
+agent = FarmAgent(sim)
 
 DASHBOARD = """<!doctype html>
 <html><head><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -15,10 +19,12 @@ h1{margin-bottom:4px}.sub{color:#607565}.grid{display:grid;grid-template-columns
 .card{background:white;border:1px solid #dbe5da;border-radius:14px;padding:18px;box-shadow:0 2px 8px #0000000b}
 .metric{font-size:28px;font-weight:700}.field{border-left:5px solid #4b8f55}
 button{border:0;border-radius:9px;padding:10px 14px;background:#246b3b;color:white;cursor:pointer}
-pre{white-space:pre-wrap}.tag{display:inline-block;padding:4px 8px;border-radius:999px;background:#edf5ed}
+input{padding:12px;border:1px solid #ccd8ca;border-radius:9px;flex:1}form{display:flex;gap:8px}.chat{min-height:90px;white-space:pre-wrap}
+.tag{display:inline-block;padding:4px 8px;border-radius:999px;background:#edf5ed}
 </style></head><body>
-<h1>🌱 FarmMind</h1><div class="sub">AI-powered irrigation decision system — software-only farm simulation</div>
+<h1>🌱 FarmMind</h1><div class="sub">AI-powered irrigation decision system — software-only farm simulation + MCP</div>
 <div id="metrics" class="grid"></div><h2>Field decisions</h2><div id="fields" class="grid"></div>
+<h2>Ask FarmMind AI</h2><div class="card"><form onsubmit="ask(event)"><input id="q" placeholder="Should I irrigate Field 2?"><button>Ask</button></form><div id="answer" class="chat">Try: "Which field needs water first?"</div></div>
 <h2>7-day impact simulation</h2><div class="card"><pre id="analytics">Loading…</pre></div>
 <script>
 async function load(){
@@ -32,8 +38,19 @@ async function load(){
  }).join('');
  document.getElementById('analytics').textContent=JSON.stringify(a,null,2);
 }
+async function ask(e){
+ e.preventDefault();
+ const q=document.getElementById('q').value;
+ document.getElementById('answer').textContent='Thinking…';
+ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q})});
+ const d=await r.json();
+ document.getElementById('answer').textContent=d.answer || d.detail || 'No answer';
+}
 load();
 </script></body></html>"""
+
+class ChatRequest(BaseModel):
+    message: str
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
@@ -81,7 +98,10 @@ def simulate(field_id: str, water_l: float):
     return {"field_id": field_id, "water_applied_l": round(applied,1),
             "moisture_before_pct": round(before,1), "moisture_after_pct": round(field.soil_moisture_pct,1)}
 
-# Mount MCP streamable HTTP endpoint when the installed SDK supports it.
+@app.post("/api/chat")
+def chat(request: ChatRequest):
+    return agent.answer(request.message)
+
 try:
     from .mcp_server import mcp
     app.mount("/mcp", mcp.streamable_http_app())
