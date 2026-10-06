@@ -1,7 +1,9 @@
-import { createClient, type RedisClientType } from "redis";
+import { createClient } from "redis";
 
-let client: RedisClientType | null = null;
-let connecting: Promise<RedisClientType | null> | null = null;
+type Redis = ReturnType<typeof createClient>;
+
+let client: Redis | null = null;
+let connecting: Promise<Redis | null> | null = null;
 
 async function getRedis() {
   if (!process.env.REDIS_URL) return null;
